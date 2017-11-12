@@ -859,8 +859,10 @@ class DVAHedging(Env):
             iTraxx = round(-sensitivity_dva / sensitivity_iTraxx)  # long risk
             delta_iTraxx = iTraxx - self.allocation_tot[3]
             action[2] = delta_iTraxx
+        elif flag == "naked strategy":
+            return action # don't do nothing
         else:
-            print("error : please select sx7e-btp-iTraxx")
+            print("error : please select sx7e-btp-iTraxx-naked strategy")
         return action
 
     """

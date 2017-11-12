@@ -20,6 +20,7 @@ import os
 import lasagne.nonlinearities as NL
 from rllab.algos.trpo import TRPO
 from rllab.algos.npo import NPO
+from rllab.algos.erwr import ERWR
 from rllab.algos.vpg import VPG
 from rllab.algos.nop import NOP
 from rllab.algos.cem import CEM
@@ -33,17 +34,16 @@ import shutil
 
 # -----------------------------------------------------------------------------
 # INPUT parameters ------------------------------------------------------------
-input_parameters = {'n_itr': 2, 'N': 2, 'horizon': 7*96, 'n_neurons': 5, \
+input_parameters = {'n_itr': 100, 'N': 15, 'horizon': 7*96, 'n_neurons': 3, \
                     'empty_training': 0, 'empty_test': 1}
 # CLASS parameters ------------------------------------------------------------
 class_parameters = {'risk_factor': 1.00, 'dva_nominal': 400e6, 'window_offset': 1, \
                     'window_offset_day': 1, 'window_offset_week': 0,  'low_bound': 6}
 # -----------------------------------------------------------------------------
-step_size_list   = [0.00008]
+step_size_list   = [0.001]
 risk_factor_list = [1]
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
-
 
 # start timer 
 tic = time.time()
@@ -74,7 +74,7 @@ for p in class_parameters.keys():
 s = s + "\n"
 
 
-directory = '../results/results_NPO_'+datetime.now().strftime("%Y_%m_%d_%H_%M_%S")+'/'
+directory = '../results/results_ERWR_'+datetime.now().strftime("%Y_%m_%d_%H_%M_%S")+'/'
 if os.path.exists(directory):
     shutil.rmtree(directory)
     
@@ -91,19 +91,22 @@ filename = '../dataset/DatasetDVA_2017-10-09_cleaned.csv'
 data = pd.read_csv(filename, sep=';')
 
 # ----------------------------------------------------------------------------
-bsl = ['btp', 'iTraxx', 'btp-iTraxx']
+bsl = ['btp', 'iTraxx', 'btp-iTraxx', 'naked strategy']
 
 DVAepisodes_train  = DVA_episodes()  # save in here all the trajectories
+# baseline
 DVAepisodes_bsl_train = []
 for b in range(len(bsl)):
     DVAepisodes_bsl_train.append(DVA_episodes())
 
 DVAepisodes  = DVA_episodes()  # save in here all the trajectories
+# baseline
 DVAepisodes_bsl = []
 for b in range(len(bsl)):
     DVAepisodes_bsl.append(DVA_episodes())
 
-selu = NL.SELU(scale=1.0507009873554804934193349852946, scale_neg=1.6732632423543772848170429916717)
+
+#selu = NL.SELU(scale=1.0507009873554804934193349852946, scale_neg=1.6732632423543772848170429916717)
 for idx in range(len(risk_factor_list)):
     risk_factor = risk_factor_list[idx]
     step_size   = step_size_list[idx]
@@ -114,14 +117,14 @@ for idx in range(len(risk_factor_list)):
     
     policy = GaussianMLPPolicy(
         env_spec=env.spec,
-        hidden_sizes=(n_neurons,n_neurons ),
-        std_hidden_nonlinearity= NL.selu,
-        hidden_nonlinearity= NL.selu,
+        hidden_sizes=(n_neurons,),
+        std_hidden_nonlinearity= NL.tanh,
+        hidden_nonlinearity= NL.tanh,
     )
 
     baseline = LinearFeatureBaseline(env_spec=env.spec)
     
-    algo = NPO(
+    algo = ERWR(
         env=env,
         policy=policy,
         baseline=baseline,
@@ -131,10 +134,11 @@ for idx in range(len(risk_factor_list)):
         discount=1,
     )
 
-    returns = algo.train()
+    [returns, v_weights] = algo.train()
 
     path_training = plot_results(directory+'train/',[returns], xlabel = 'Number Iteration', ylabel = 'Average Return ', title = 'Training Phase', name = 'training_return', risk_factor=risk_factor)
-    
+    path_weights = plot_results(directory+'train/',[v_weights], xlabel = 'Number Iteration', ylabel = 'Neural Network weights', title = 'Training Phase', name = 'weights', risk_factor=risk_factor)
+
     # --------------- test ----------------------------------------------------------
     print("Starting test on train data....")
 
@@ -150,7 +154,7 @@ for idx in range(len(risk_factor_list)):
     env_bsl = []
     for b in range(len(bsl)):
         env_bsl.append(DVAHedging(market_datafile=filename, horizon=horizon,training=True,dva_nominal=dva_nominal, window_offset=window_offset,risk_factor=risk_factor, \
-                      window_offset_day=window_offset_day, window_offset_week=window_offset_week, empty_allocation=1,verbose=0, low_bound=low_bound,sep=';'))
+                                  window_offset_day=window_offset_day, window_offset_week=window_offset_week, empty_allocation=1,verbose=0, low_bound=low_bound,sep=';'))
 
     rows = data.shape[0]-low_bound-1
     l_bound = 96*7
@@ -241,43 +245,43 @@ for idx in range(len(risk_factor_list)):
     # -------------------------------------------------------------------------
     print("Real test....")
     # -------------------------------------------------------------------------
-    
+
     env.wrapped_env.empty_allocation = empty_test
     env.wrapped_env.training = False
 
     DVAepisode = DVA_episode(risk_factor)
-    
+
     DVAepisode_bsl = []
     for b in range(len(bsl)):
         DVAepisode_bsl.append(DVA_episode(risk_factor))
-    
+
     #   creare l' ambiente per le baseline
     env_bsl = []
     for b in range(len(bsl)):
         env_bsl.append(DVAHedging(market_datafile=filename, horizon=horizon,training=True,dva_nominal=dva_nominal, window_offset=window_offset,risk_factor=risk_factor, \
-                      window_offset_day=window_offset_day, window_offset_week=window_offset_week, empty_allocation=1,verbose=0, low_bound=low_bound,sep=';'))
+                                  window_offset_day=window_offset_day, window_offset_week=window_offset_week, empty_allocation=1,verbose=0, low_bound=low_bound,sep=';'))
 
     l_bound = round(3/4*rows)+1
-    u_bound  = data.shape[0] 
-    
+    u_bound  = data.shape[0]
+
     n_test = 1 # keep track of the number of trajectories per episode
-       
+
     while (l_bound + horizon*n_test)< u_bound:
         # select start point in test set
         start_point = l_bound + horizon*(n_test-1)
-    
+
         for b in range(len(bsl)):
             env_bsl[b].start_point = start_point
-        
+
         # select the state, and the first action to hedge the portfolio, use the baseline
         for b in range(len(bsl)):
-            _ = env_bsl[b].reset()   
+            _ = env_bsl[b].reset()
             action_bsl      = env_bsl[b].baseline_action(flag=bsl[b])
             _, _, _, _ = env_bsl[b].step(action_bsl)
-#            if bls[b]=='btp':
-                # env.wrapped_env.start_point = start_point
-                # observation = env.wrapped_env.reset()
-                # observation, reward, terminal, _ = env.wrapped_env.step(action_bsl)
+            #            if bls[b]=='btp':
+            # env.wrapped_env.start_point = start_point
+            # observation = env.wrapped_env.reset()
+            # observation, reward, terminal, _ = env.wrapped_env.step(action_bsl)
 
         # reset anche l'ambiente test
         env.wrapped_env.start_point = start_point + 1
@@ -287,12 +291,12 @@ for idx in range(len(risk_factor_list)):
         DVAtrajectories = DVA_trajectories()
         DVAtrajectories.append(env.wrapped_env.allocation_tot, env.wrapped_env.total_PL)
         # baseline
-    
+
         DVAtrajectories_bsl = []
         for b in range(len(bsl)):
             DVAtrajectories_bsl.append(DVA_trajectories())
             DVAtrajectories_bsl[b].append(env_bsl[b].allocation_tot, env_bsl[b].total_PL)
-        
+
         # a inizio traittoria, inizializzare il P&L giornaliero a 0 -----------
         daily_PL     = 0
         daily_PL_bsl = np.zeros(len(bsl))
@@ -303,12 +307,12 @@ for idx in range(len(risk_factor_list)):
             action = policy_param['mean']
             next_observation, reward, terminal, _ = env.wrapped_env.step(action)
             observation = next_observation
-    
+
             # step baseline ---------------------------------------------------
             for b in range(len(bsl)):
                 action_bsl = env_bsl[b].baseline_action(flag=bsl[b])
                 _, _, _, _ = env_bsl[b].step(action_bsl)
-    
+
             # update del P&L giornaliero --------------------------------------
             if env.wrapped_env.chiusura == 0:
                 daily_PL += env.wrapped_env.total_PL
@@ -317,40 +321,40 @@ for idx in range(len(risk_factor_list)):
             else:
                 DVAtrajectories.add_daily_PL(daily_PL)
                 daily_PL = 0
-    
+
                 for b in range(len(bsl)):
                     DVAtrajectories_bsl[b].add_daily_PL(daily_PL_bsl[b])
                     daily_PL_bsl[b] = 0
-                              
+
             # aggiungere lo step alle traiettorie -----------------------------
             DVAtrajectories.append(env.wrapped_env.allocation_tot, env.wrapped_env.total_PL)
-    
+
             for b in range(len(bsl)):
                 DVAtrajectories_bsl[b].append(env_bsl[b].allocation_tot, env_bsl[b].total_PL)
-        
+
         # salvavare le traiettorie nell' oggetto episodio ---------------------
         DVAepisode.append(DVAtrajectories)
-    
+
         for b in range(len(bsl)):
             DVAepisode_bsl[b].append(DVAtrajectories_bsl[b])
-        
+
         # mandare avanti di 1 il contatore del numero di triettorie di test ---
         n_test += 1
-    
-    # salvare gli episodi -----------------------------------------------------    
+
+    # salvare gli episodi -----------------------------------------------------
     DVAepisodes.append(DVAepisode)
     for b in range(len(bsl)):
         DVAepisodes_bsl[b].append(DVAepisode_bsl[b])
-    
-    ## -------------------- plot trajectories --------------------------------- 
+
+    ## -------------------- plot trajectories ---------------------------------
     path_sx7e = plot_results(directory+'test/',DVAepisode.sx7e, xlabel = 'Step', ylabel = 'lotti SX7E',  name = 'SX7E_Policy', risk_factor=risk_factor)
     path_btp = plot_results(directory+'test/',DVAepisode.btp, xlabel = 'Step', ylabel = 'lotti BTP',  name = 'BTP_Policy', risk_factor =risk_factor)
     path_iTraxx = plot_results(directory+'test/',DVAepisode.itraxx, xlabel = 'Step', ylabel = 'lotti ITRAXX',  name = 'ITRAXX_Policy', risk_factor=risk_factor)
     path_bank_account = plot_results(directory+'test/',DVAepisode.bank_account, xlabel = 'Step', ylabel = 'bank_account',  name = 'bank_account', risk_factor=risk_factor)
-       
 
 
-# plottare la frontiera P&L - Misura del Rischio ------------------------------    
+
+# plottare la frontiera P&L - Misura del Rischio ------------------------------
 plot_PL_RM(directory+'train/', DVAepisodes_train, DVAepisodes_bsl_train, bsl, n_test_train, flag = 'VaR')
 plot_PL_RM(directory+'train/', DVAepisodes_train, DVAepisodes_bsl_train, bsl, n_test_train, flag = 'ES')
 plot_PL_RM(directory+'train/', DVAepisodes_train, DVAepisodes_bsl_train, bsl, n_test_train, flag = 'L2')
@@ -360,11 +364,11 @@ plot_PL_RM(directory+'test/', DVAepisodes, DVAepisodes_bsl, bsl, n_test, flag = 
 plot_PL_RM(directory+'test/', DVAepisodes, DVAepisodes_bsl, bsl, n_test, flag = 'L2')
 
 # running time ----------------------------------------------------------------
-toc = time.time() 
+toc = time.time()
 elapsed = (toc - tic)/60
 print("computation time (min):  %3.2f" %elapsed)
 
-s = "\n# hidden layers: " + str(algo.policy._cached_param_shapes[()][1])
+s = "\n# hidden layers: " + str(len(algo.policy._mean_network._layers)-2)
 s = s + "\n\ncomputation time : "+str(elapsed) + " min \n"
 # s = s + "P&L :  " + str(DVAepisodes.PL_m) + str(DVAepisodes.PL_sigma) + \
 #         "\nVaR :  " + str(DVAepisodes.VaR_m) + str(DVAepisodes.VaR_sigma) + \
@@ -374,6 +378,6 @@ f = open(directory + 'test_description.txt', 'a')
 f.write(s)
 f.close()
 
-print(" ... End!")    
+print(" ... End!")
 
 
