@@ -1,0 +1,326 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue May 29 15:13:51 2018
+
+@author: vitgior
+"""
+
+import pandas as pd
+from lxml import etree
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver import ActionChains
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.select import Select
+from selenium.webdriver.common.by import By
+import os
+import zipfile
+import time
+import shutil
+import sys
+import getpass
+import datetime
+
+
+#%% retrieve the password
+passw = open("C:/Users/vitgior/Desktop/p.txt", "r")
+password = passw.read(11)
+passw.close()
+
+
+#%% BOT class
+class  myBOT():
+    
+    def __init__(self, download_directory = None):
+        options = webdriver.ChromeOptions()
+        if download_directory is not None:
+            options.add_experimental_option("prefs", {"download.default_directory": download_directory})
+#        options.add_argument("headless")
+        self.driver = webdriver.Chrome(chrome_options=options)
+
+    def ConnectToURL(self, url):
+        self.driver.get(url)
+        driver = self.driver
+        userElement = WebDriverWait(driver,10).until(lambda driver: driver.find_element_by_name("userid"))
+        passElement = WebDriverWait(driver,10).until(lambda driver: driver.find_element_by_name("password"))
+        loginButton = WebDriverWait(driver,10).until(lambda driver: driver.find_element_by_name("submit"))
+        userElement.clear()
+        userElement.send_keys(user)
+        passElement.clear()
+        passElement.send_keys(password)
+        loginButton.click()
+
+    def taerDown(self):
+        self.driver.quit()
+
+
+class TS(myBOT):
+
+    def downloadOA(self, DatesRef, listOAs=None):
+        driver = self.driver
+        MonitoringXpath = "/html/body/anacredit-app/nav/div/div[2]/ul/li[1]/a"
+        el = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, MonitoringXpath)))
+        el.click()
+        el2 = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.XPATH, "/html/body/anacredit-app/nav/div/div[2]/ul/li[1]/ul/li[2]/a")))
+        el2.click()
+        # set the filters -----------------------------------------------------
+        # Set OA
+        if listOAs is not None:
+            OAsXpath = "/html/body/anacredit-app/div[2]/div/summarybyoa/div[3]/div/form/fieldset/div/div/div[2]/div[1]/p-autocomplete/span/ul/li/input"
+            elOA = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, OAsXpath)))
+            listOAXPath = "/html/body/anacredit-app/div[2]/div/summarybyoa/div[3]/div/form/fieldset/div/div/div[2]/div[1]/p-autocomplete/span/div/ul/li"
+            for OA in list_of_OAs:
+                elOA.send_keys(OA)
+                stop = 0
+                i = 1
+                while stop == 0:
+                    OAXpath = listOAXPath + '[' + str(i) + ']'
+                    OAel = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, OAXpath)))
+                    if OAel.text[:len(OA)] == OA:
+                        OAel.click()
+                        stop = 1
+                    i = i + 1
+        # set Ref Dates
+        RefDateXpath = "/html/body/anacredit-app/div[2]/div/summarybyoa/div[3]/div/form/fieldset/div/div/div[1]/div[1]/p-autocomplete/span/button/span[1]"
+        el2 = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, RefDateXpath)))
+        el2.click()
+        date_list_Xpath = "/html/body/anacredit-app/div[2]/div/summarybyoa/div[3]/div/form/fieldset/div/div/div[1]/div[1]/p-autocomplete/span/div/ul/li"
+
+        if DatesRef is not None:
+            for DateRef in DatesRef:
+                stop = 0
+                i = 1
+                while stop == 0:
+                    dateXpath = date_list_Xpath + '[' + str(i) + ']'
+                    date = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, dateXpath)))
+                    if date.text == DateRef:
+                        date.click()
+                        stop = 1
+                    i = i + 1
+        # apply filter & download
+        applyFilterXpath = "/html/body/anacredit-app/div[2]/div/summarybyoa/div[3]/div/form/fieldset/fieldset/div[2]/button[1]"
+        applyFilter = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, applyFilterXpath)))
+        applyFilter.click()
+        exportXpath = "/html/body/anacredit-app/div[2]/div/summarybyoa/div[3]/div/form/fieldset/fieldset/div[2]/button[2]"
+        export = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, exportXpath)))
+        export.click()
+        return 1
+
+    def downloadFR(self, DatesRef, listOAs=None):
+
+        driver = self.driver
+
+        MonitoringXpath = "/html/body/anacredit-app/nav/div/div[2]/ul/li[1]/a"
+        el = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, MonitoringXpath)))
+        el.click()
+        el2 = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.XPATH, "/html/body/anacredit-app/nav/div/div[2]/ul/li[1]/ul/li[3]/a")))
+        el2.click()
+
+        # set the filters -----------------------------------------------------
+        # Set OA
+        if listOAs is not None:
+            OAsXpath = "/html/body/anacredit-app/div[2]/div/anacredit-app/div[3]/div/form/fieldset/div/div/div[2]/div[2]/div[2]/p-autocomplete/span/ul/li/input"
+            elOA = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, OAsXpath)))
+            listOAXPath = "/html/body/anacredit-app/div[2]/div/anacredit-app/div[3]/div/form/fieldset/div/div/div[2]/div[2]/div[2]/p-autocomplete/span/div/ul"
+            for OA in list_of_OAs:
+                elOA.send_keys(OA)
+                stop = 0
+                i = 1
+                while stop == 0:
+                    OAXpath = listOAXPath + '[' + str(i) + ']'
+                    OAel = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, OAXpath)))
+                    if OAel.text[:len(OA)] == OA:
+                        OAel.click()
+                        stop = 1
+                    i = i + 1
+        # set Ref Dates
+        RefDateXpath = "/html/body/anacredit-app/div[2]/div/anacredit-app/div[3]/div/form/fieldset/div/div/div[1]/div[1]/p-autocomplete/span/button/span[1]"
+        el2 = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, RefDateXpath)))
+        el2.click()
+        date_list_Xpath = "/html/body/anacredit-app/div[2]/div/anacredit-app/div[3]/div/form/fieldset/div/div/div[1]/div[1]/p-autocomplete/span/div/ul/li"
+        if DatesRef is not None:
+            for DateRef in DatesRef:
+                stop = 0
+                i = 1
+                while stop == 0:
+                    dateXpath = date_list_Xpath + '[' + str(i) + ']'
+                    date = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, dateXpath)))
+                    if date.text == DateRef:
+                        date.click()
+                        stop = 1
+                    i = i + 1
+
+        # apply filter & download
+        applyFilterXpath = "/html/body/anacredit-app/div[2]/div/anacredit-app/div[3]/div/form/fieldset/fieldset/div[2]/button[1]"
+        applyFilter = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, applyFilterXpath)))
+        applyFilter.click()
+        exportXpath = "/html/body/anacredit-app/div[2]/div/anacredit-app/div[3]/div/form/fieldset/fieldset/div[2]/button[2]"
+        export = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, exportXpath)))
+        export.click()
+        return 1
+
+
+class AS(myBOT):
+
+    def downloadCCd(self, DatesRef, OA=None):
+        driver = self.driver
+        CCManagementXpath = "/html/body/my-app/ac-navbar/div/nav/div/div[3]/ul/li[1]/a"
+        el = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, CCManagementXpath)))
+        el.click()
+        el2 = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.XPATH, "/html/body/my-app/ac-navbar/div/nav/div/div[3]/ul/li[1]/a/ul/li[2]/a/ul/li/a")))
+        el2.click()
+        # set the filters -----------------------------------------------------
+        # Set OA
+        if OA is not None:
+            OAsXpath = '//*[@id="searchRCFilter"]'
+            elOA = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, OAsXpath)))
+            # elOA = WebDriverWait(driver, 10).until(lambda driver: driver.find_element_by_name("searchOAFilter"))
+            elOA.send_keys(OA)
+            listOAXPath = '//*[@id="OARIADCode_Filter"]/div/typeahead-container/ul/li'
+            stop = 0
+            i = 1
+            while stop == 0:
+                OAXpath = listOAXPath + '[' + str(i) + ']'
+                OAel = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, OAXpath)))
+                if OAel.text[:len(OA)] == OA:
+                    OAel.click()
+                    stop = 1
+                i = i + 1
+        # set Ref Dates
+        RefDateXpath = '//*[@id="setDatePicker_Filter"]/div/div/div/a/em'
+        el2 = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, RefDateXpath)))
+        el2.click()
+        yearXpath = '//*[@id="referenceDate"]/datepicker-inner/div/monthpicker/table/thead/tr/th[2]'
+        if DatesRef is not None:
+            for DateRef in DatesRef:
+                stop = 0
+                while stop == 0:
+                    year = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, yearXpath)))
+                    if year.text == DateRef[:4]:
+                        month = int(DateRef[-2:])
+                        row = int((month-1)/3) + 1
+                        col = (month-1)%3 + 1
+                        dateXpath = '//*[@id="referenceDate"]/datepicker-inner/div/monthpicker/table/tbody/tr['+str(row)+']/td['+str(col)+']'
+                        date = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, dateXpath)))
+                        date.click()
+                        stop = 1
+                    elif int(year.text) > int(DateRef[:4]):
+                        leftXpath = '//*[@id="referenceDate"]/datepicker-inner/div/monthpicker/table/thead/tr/th[1]/button'
+                        left = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, leftXpath)))
+                        left.click()
+                    else:
+                        rightXpath = '//*[@id="referenceDate"]/datepicker-inner/div/monthpicker/table/thead/tr/th[3]'
+                        right = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, rightXpath)))
+                        right.click()
+
+        # apply filter & download
+        applyFilterXpath = "/html/body/my-app/ac-cleancopies/div/ac-cleancopies-filters/div/div/div[1]/div[2]/div[3]/button[1]"
+        applyFilter = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, applyFilterXpath)))
+        applyFilter.click()
+
+        # wait the filter has been applied
+        filterCCd = '//*[@id="cleanCopiesDataTable"]/p-table/div/div[2]/div/div[2]/table/tbody/tr[1]'
+        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, filterCCd)))
+
+        exportXpath = '//*[@id="cleanCopiesDataTable"]/p-table/div/div[1]/div/button'
+        export = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, exportXpath)))
+        export.click()
+        return 1
+
+# %%
+def wait_until(cond, timeout, period=0.25):
+  mustend = time.time() + timeout
+  while time.time() < mustend:
+    if cond==1: return True
+    time.sleep(period)
+  return False
+        
+#%% Main      
+ 
+if __name__ == '__main__':
+    
+    # set here the download directory, the list of OAs and the list of Ref Dates
+    download_directory = 'C:/Users/vitgior/Desktop/BOT/downloads/'
+    list_of_OAs = [] #["ATOA_TS_HP1A", "ATOA_TS_HP1B"]
+    list_of_RefDates = ["2016-09"]
+
+    # %% connection to server
+    user = "t-euvitgior"
+    #password = getpass.getpass(prompt='Password for user '+str(user) + ': ', stream=None)
+    proxy = {
+        "http": "http://vitgior:" + password + "@app-gw-2.ecb.de:8080/",
+        "https": "https://vitgior:" + password + "@app-gw-2.ecb.de:8080/",
+    }
+
+    urlTS = "https://a-anacredit-ts.escb.eu/AnaCreditUI/#/"
+    urlAS = "https://a-anacredit-as.escb.eu/acr_web/#/"
+
+    shutil.rmtree(download_directory)
+    os.makedirs(download_directory)
+
+    TSdriver = TS(download_directory)
+    TSdriver.ConnectToURL(urlTS)
+
+    # Summury by OA
+
+    endOA = TSdriver.downloadOA(list_of_RefDates, list_of_OAs)
+    wait_until(endOA, 10)
+    time.sleep(5)
+    endFR = TSdriver.downloadFR(list_of_RefDates, list_of_OAs)
+    wait_until(endFR, 10)
+    time.sleep(5)
+    files = os.listdir(download_directory)
+
+    for fname in files:
+        if fname[-3:] == "zip":
+            zip_ref = zipfile.ZipFile(download_directory + fname)
+            zip_ref.extractall(download_directory)
+            zip_ref.close()
+
+    TSdriver.taerDown()
+
+    ASdriver = AS(download_directory)
+    ASdriver.ConnectToURL(urlAS)
+    endCCd = ASdriver.downloadCCd(list_of_RefDates)
+    wait_until(endCCd, 10)
+    time.sleep(5)
+    ASdriver.taerDown()
+
+    OASummary = pd.read_csv(download_directory + "exportMonitoringByOA.dsv", sep="|")
+    list_timestamp = [ 'MONTHLY_DEADLINE', 'QUARTERLY_DEADLINE']
+    for col in list_timestamp:
+        OASummary[col] = [datetime.datetime.strptime(str(int(OASummary[col][i])), "%Y%m%d") for i in range(len(OASummary))]
+        OASummary[col] = [OASummary[col][i].replace(hour=17) for i in range(len(OASummary))]
+    FRSummary = pd.read_csv(download_directory + "exportMessages.dsv", sep="|")
+    FRSummary['FILE_SUB_TMS'] = [datetime.datetime.strptime(FRSummary['FILE_SUB_TMS'][i], "%Y-%m-%d %H:%M:%S.%f") for i in range(len(FRSummary))]
+    FRSummary = FRSummary.rename(columns={'OBSERVED_AGENT': 'OBS_AGNT', 'REFERENCE_DATE': 'REF_DATE'}, index=str)
+    CCd = pd.read_csv(download_directory + "cleanCopies.csv")
+    CCd = CCd.rename(columns={'Observed agent Code': 'OBS_AGNT', 'Reference period': 'REF_DATE'}, index=str)
+    FR_OA = pd.merge(FRSummary, OASummary[["REF_DATE", 'OBS_AGNT', 'MONTHLY_DEADLINE', 'QUARTERLY_DEADLINE']], \
+                     how="left", on=["REF_DATE", 'OBS_AGNT'])
+    FR_OA['DEADLINE'] = [FR_OA['MONTHLY_DEADLINE'][i] if FR_OA['DEADLINETYPE'][i] == "Monthly" else FR_OA['QUARTERLY_DEADLINE'][i] for i in range(len(FR_OA))]
+    #FR_OA['SUB_BFR_DDLN'] = FR_OA['FILE_SUB_TMS'] < FR_OA['DEADLINE']
+    FR_OA['SUB_BFR_DDLN'] = [True]*len(FR_OA)
+    FR_OA['CONCLUDED'] =[FR_OA['STATUS'][i] in ["ACCEPTED", "REJECTED"] for i in range(len(FR_OA))]
+    FR_OA['ACCEPTED'] = FR_OA['STATUS'] == "ACCEPTED"
+    FR_OA['T1M'] = FR_OA['TYPE_OF_REPORT'] == "ANCRDT_T1M"
+    FR_OA['T1M_ACCEPTED'] = [FR_OA['T1M'][i]*FR_OA['ACCEPTED'][i]*FR_OA['SUB_BFR_DDLN'][i] for i in range(len(FR_OA))]
+
+    FR_OA['KEY'] = [str(FR_OA['REF_DATE'][i]) + str(FR_OA['OBS_AGNT'][i]) for i in range(len(FR_OA))]
+    Qualified = set(FR_OA[FR_OA['T1M_ACCEPTED'] == True]['KEY'])
+    FR_OA['QUALIFIES']  = [True if FR_OA['KEY'][i] in Qualified else False for i in range(len(FR_OA))]
+    FR_QUALIFIED = FR_OA[FR_OA['QUALIFIES']==True]
+    LTC = FR_QUALIFIED.groupby(['KEY'])['LAST_STATUS_CHANGE_TMS'].max()
+    Last_time_change = pd.DataFrame({'KEY': list(LTC.index), 'MAX_LAST_STATUS_CHANGE_TMS': list(LTC)})
+    FR_OA = pd.merge(FR_OA, Last_time_change, on=['KEY'], how="left")
+
+
+    writer = pd.ExcelWriter('Tables.xlsx')
+    OASummary.to_excel(writer, "OA")
+    FRSummary.to_excel(writer, "Files Received")
+    CCd.to_excel(writer, "CCd")
+    writer.save()
