@@ -1,0 +1,113 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Mar 14 15:07:10 2018
+
+@author: vitgior
+"""
+import os
+import pandas as pd
+
+
+list_of_sheets_T1M = ['ANCRDT_HDR_C', 'ANCRDT_INSTRMNT_C', 'ANCRDT_FNNCL_C', 
+                  'ANCRDT_ENTTY_INSTRMNT_C', 'ANCRDT_JNT_LBLTS_C']
+list_of_sheets_T2M = ['ANCRDT_HDR_C', 'ANCRDT_ENTTY_DFLT_C', 'ANCRDT_ENTTY_RSK_C', 
+                      'ANCRDT_PRTCTN_RCVD_C','ANCRDT_INSTRMNT_PRTCTN_RCVD_C']
+list_of_sheets_T2Q = ['ANCRDT_HDR_C', 'ANCRDT_ACCNTNG_C'] 
+
+list_of_int = ["DFLT_STTS"]
+list_of_float = []
+
+
+def match_flag_sheets(flag):
+    if flag == "ANCRDT_T1M":
+        l = list_of_sheets_T1M 
+    elif flag == "ANCRDT_T2M":
+        l = list_of_sheets_T2M 
+    else:
+        l = list_of_sheets_T2Q
+    return l
+
+#%%
+def ReplaceSpecialChar(origin):
+
+  origin.replace("&", "&amp;")
+  origin.replace("<", "&lt;")
+  origin.replace(">", "&gt;")
+  origin.replace("'", "&apos;")
+  origin.replace('""', "&quot;")
+  return origin
+
+  
+def create_obs(Obs, df,cols,i):
+    for col in cols:
+        el = str(df[col].iloc[i])
+        if el != "" and el != "None" and el != "nan" and el != " ":
+            if len(el)>2 and el[-2:] == '.0':
+                el = el[:-2]
+            if "." in el:
+                if len(el.split(".")[1]) > 6:
+                    el = el[:el.find(".")+7]
+            cleaned_el = ReplaceSpecialChar(el)
+            Obs.setAttribute(col, cleaned_el)
+    return Obs
+
+#%%        
+def structure_node(root, header, flag):
+    l = match_flag_sheets(flag)
+    for name in l:
+        structure = root.createElement('message:Structure')
+        structure.setAttribute('structureID', name)
+        structure.setAttribute('namespace', name)
+        structure.setAttribute('dimensionAtObservation', 'AllDimensions')
+        common_structure = root.createElement('common:Structure')
+        ref = root.createElement('Ref')
+        ref.setAttribute('agencyID', 'ECB')
+        ref.setAttribute('id', name)
+        common_structure.appendChild(ref)
+        structure.appendChild(common_structure)
+        header.appendChild(structure)
+    
+    return [root, header]
+
+
+
+#%%
+def writeSDMXDataset_csv(SRVY_ID, workSheetName, DSDName, action, root, StructureSpecificData, path):   
+
+    DataSet = root.createElement('message:DataSet')
+    StructureSpecificData.appendChild(DataSet)
+    DataSet.setAttribute('data:structureRef', DSDName)
+    DataSet.setAttribute('xsi:type', SRVY_ID+":"+DSDName)
+    DataSet.setAttribute('data:dataScope', 'DataStructure')
+    if action !="":
+        DataSet.setAttribute('data:action', 'Replace')
+    DataSet.setAttribute('message:DataSetID', SRVY_ID)
+    
+    
+    df = pd.read_csv(path + workSheetName + ".csv", low_memory=False)
+    df['delete'] = [str(df[df.columns[0]][i])=="nan" for i in range(len(df))]
+    df = df[df['delete']==0]
+    df = df.drop(['delete'], axis=1)
+
+#### CAREFUL you may want to comment it #######################################
+#    if workSheetName == 'ANCRDT_ENTTY_INSTRMNT_C':
+#        df_7 = df[df['ENTTY_RL']==1]
+#        df_7 = df_7.replace(1,'7')
+#        df = pd.concat([df, df_7], axis=0)
+#        end = df[-10:]
+#        end.to_csv("ANCRDT_ENTTY_INSTRMNT_C2.csv")
+###############################################################################       
+        
+    
+    for i in range(len(df)):
+        Obs = root.createElement('Obs')
+        DataSet.appendChild(Obs)
+        Obs = create_obs(Obs, df, list(df.columns), i)
+        
+    StructureSpecificData.appendChild(DataSet)
+    
+    return [root, StructureSpecificData]
+
+
+
+    
