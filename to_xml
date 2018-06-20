@@ -1,0 +1,110 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Mar 13 17:44:31 2018
+
+@author: vitgior
+"""
+
+#import xml.etree.ElementTree as ET
+#import xlrd
+#from lxml import etree
+from xml.dom import minidom
+import os
+import xlwings as xw
+from modules import structure_node, writeSDMXDataset_csv
+import time
+import pandas as pd
+
+#%% Open Excel
+name_excel = "GN4A_20180404_" 
+#wb = xw.Book("../Test/"+name_excel+".xlsm")
+path = "C:/Users/vitgior/Desktop/excel_to_xml/Test/"
+#%%
+#SURVEY_list = ["ANCRDT_T1M", "ANCRDT_T2M", "ANCRDT_T2Q"]
+SURVEY_list = ["ANCRDT_T1M", "ANCRDT_T2M", "ANCRDT_T2Q"]
+
+start_time = time.time()
+
+for SURVEY in SURVEY_list:
+    #%%
+    root = minidom.Document()
+    
+    StructureSpecificData = root.createElement('message:StructureSpecificData')
+    root.appendChild(StructureSpecificData)
+    StructureSpecificData.setAttribute('xmlns:message',"http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message")
+    StructureSpecificData.setAttribute('xmlns:data',"http://www.sdmx.org/resources/sdmxml/schemas/v2_1/data/structurespecific")
+    StructureSpecificData.setAttribute('xmlns:common',"http://www.sdmx.org/resources/sdmxml/schemas/v2_1/common")
+    StructureSpecificData.setAttribute('xmlns:xsi',"http://www.w3.org/2001/XMLSchema-instance")
+    StructureSpecificData.setAttribute('xmlns:'+SURVEY,"http://www.escb.eu/rf/sdmx/"+SURVEY)
+    
+    
+    #%%
+    workSheetName = "SDMX_HEADER"   
+    
+    df = pd.read_csv(path + workSheetName + ".csv", low_memory=False)
+    
+    header = root.createElement('message:Header')
+    StructureSpecificData.appendChild(header)
+    msg_ID = root.createElement('message:ID')
+    msg_ID.appendChild(root.createTextNode(df.iloc[0][1]))
+    header.appendChild(msg_ID)
+    msg_test = root.createElement('message:Test')
+    msg_test.appendChild(root.createTextNode("false"))
+    header.appendChild(msg_test)
+    msg_prepared = root.createElement('message:Prepared')
+    msg_prepared.appendChild(root.createTextNode(df.iloc[1][1]))
+    header.appendChild(msg_prepared) 
+    sender = root.createElement('message:Sender')
+    sender.setAttribute('id',df.columns[1])
+    header.appendChild(sender)  
+    
+    [root, header] = structure_node(root, header, SURVEY)
+    
+    datasetID =root.createElement('message:DataSetID')
+    datasetID.appendChild(root.createTextNode(SURVEY))
+    header.appendChild(datasetID) 
+
+    
+    #%%
+    if SURVEY == "ANCRDT_T1M":
+        
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_HDR_C_T1M', 'ANCRDT_HDR_C',"", root, StructureSpecificData, path)
+        print("0%")
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_INSTRMNT_C', 'ANCRDT_INSTRMNT_C',"Replace", root, StructureSpecificData, path)
+        print("25%")
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_FNNCL_C', 'ANCRDT_FNNCL_C',"Replace", root, StructureSpecificData, path)
+        print("50%")
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_ENTTY_INSTRMNT_C', 'ANCRDT_ENTTY_INSTRMNT_C',"Replace", root, StructureSpecificData, path)
+        print("75%")
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_JNT_LBLTS_C', 'ANCRDT_JNT_LBLTS_C',"Replace", root, StructureSpecificData, path)
+
+    elif SURVEY == "ANCRDT_T2M":
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_HDR_C_T2M', 'ANCRDT_HDR_C',"", root, StructureSpecificData, path)
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_ENTTY_DFLT_C', 'ANCRDT_ENTTY_DFLT_C',"Replace", root, StructureSpecificData, path)
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_ENTTY_RSK_C', 'ANCRDT_ENTTY_RSK_C',"Replace", root, StructureSpecificData, path)
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_PRTCTN_RCVD_C', 'ANCRDT_PRTCTN_RCVD_C',"Replace", root, StructureSpecificData, path)
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_INSTRMNT_PRTCTN_RCVD_C', 'ANCRDT_INSTRMNT_PRTCTN_RCVD_C',"Replace", root, StructureSpecificData, path)
+    else:
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_HDR_C_T2Q', 'ANCRDT_HDR_C',"", root, StructureSpecificData, path)
+        [root, StructureSpecificData] = writeSDMXDataset_csv(SURVEY, 'ANCRDT_ACCNTNG_C', 'ANCRDT_ACCNTNG_C',"Replace", root, StructureSpecificData, path)
+    
+          
+    end_time = time.time()
+    elapsed = end_time - start_time
+    print(elapsed)
+         
+    #%%
+    xml_str = root.toprettyxml(indent="  ")
+    
+    fr = SURVEY.split("_")[1]
+    save_path = "../"+ fr + "/" + name_excel + "_" + fr + ".xml"
+    directory = os.path.dirname(save_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    
+    with open(save_path, "w") as f:
+        f.write(str(xml_str))
+#    
+
+        
+
