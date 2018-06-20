@@ -1,0 +1,44 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Feb  5 16:07:39 2018
+
+@author: vitgior
+"""
+
+import zipfile
+import tarfile
+import pandas as pd
+import os
+import gzip
+from xlwings import Book, Range, Sheet
+import xlsxwriter
+
+
+def output_file():  
+    folder = ".\\"
+    for file in os.listdir(folder):
+        if file.endswith(".tar"):            
+            tar_file = tarfile.open(file)
+            tar_file.extractall()
+            tar_file.close()
+            
+    for file in os.listdir(folder):
+        if file.endswith(".tar"):          
+            tar_file = tarfile.open(file)
+            tar_file.extractall()
+            tar_file.close()
+    
+    writer = pd.ExcelWriter(folder + 'OUTPUT.xlsx')
+    for file in os.listdir(folder):
+         if file.endswith(".gz"):
+            t = pd.read_csv(folder + file,compression='gzip', sep = "|")
+            sheet_name = file.split(".")[0]
+            t.to_excel(writer,sheet_name =sheet_name, index=False, columns = list(t.columns))
+            
+    writer.save()   
+    
+
+if __name__ == "__main__":
+    
+    output_file()
+    
