@@ -1,0 +1,42 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar 22 11:32:59 2018
+
+@author: vitgior
+"""
+
+import pyodbc
+
+
+conn_str = (
+    r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
+    r'DBQ=C:\Users\vitgior\Desktop\Fake_Data_ETL\AnaCredit_fake_data_ETL.accdb;'
+)
+
+cnxn = pyodbc.connect(conn_str)
+crsr = cnxn.cursor()
+
+# Print table list in database.accdb
+
+for table_info in crsr.tables(tableType='RIAD_Debtors_AS'):
+    print(table_info.table_name)
+
+# Print table rows
+
+sql = """SELECT ENTTY_RIAD_CD, INSTTTNL_SCTR,ECNMC_ACTVTY, ENTRPRS_SZ, LGL_PRCDNG_STTS
+FROM Debtors;
+"""
+crsr = cnxn.execute(sql)
+idx = 1
+file = open("Exported.csv", "w")
+s= "ENTTY_RIAD_CD,INSTTTNL_SCTR,ECNMC_ACTVTY,ENTRPRS_SZ,LGL_PRCDNG_STTS"
+file.write(s + '\n')
+for row in crsr:
+    s = str(row)
+    s = s[1:-1]
+    s = s.replace("'",'')
+    s = s.replace("INSTTTNL_SCTR_",'')
+    s = s.replace("SZ_",'')
+    s = s.replace("LGL_PRCDNG_STTS_",'')
+    file.write(s + '\n')
+file.close()
